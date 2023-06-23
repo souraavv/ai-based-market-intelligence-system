@@ -1,1 +1,0 @@
-This repo contains the "how-to" related to the project.
