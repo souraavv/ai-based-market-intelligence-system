@@ -60,13 +60,13 @@ months_dict = {
 
 # TODO(VERIFY): Ensure format of date in date_range '%Y-%m-%d'
 # crawl agmarknet for range of dates
-def crawl_agmarknet_date_range(commodity: str, state: str, date_range: List[str]) -> None:
+def crawl_agmarknet_date_range(commodity: str, state: str, start_date: str, end_date: str) -> None:
 
     # aggregate date_range by years and months
     agg_date_range: Dict[str, List[str]] = dict()
-    for i in date_range:
+    for i in pd.date_range(start=start_date, end=end_date):
         # converting format of month
-        y, m = datetime.strptime(i, '%Y-%m-%d').strftime('%Y-%B').split('-')
+        y, m = i.strftime('%Y-%B').split('-')
         if y not in agg_date_range:
             agg_date_range[y] = []
         agg_date_range[y].append(m)
@@ -119,7 +119,7 @@ def crawl_agmarknet(commodity: str, state: str, month: str, year: str, retries: 
             driver.find_element(by='id', value='cphBody_cboYear').send_keys(int(year))
             driver.find_element(by='id', value='cphBody_cboMonth').send_keys(month)
             driver.find_element(by='id', value='cphBody_cboState').send_keys(state)
-            driver.find_element(by='id', value='cphBody_cboCommodity').send_keys(commodity)
+            driver.find_element(by='id', value='cphBody_cboCommodity').send_keys(commodity.capitalize())
             driver.find_element(by='id', value='cphBody_btnSubmit').click()
             table = driver.find_element(by='id', value='cphBody_gridRecords')
             rows = table.find_elements(By.TAG_NAME, "tr")
@@ -263,4 +263,4 @@ def process_raw(commodity: str, state: str, month: str, year: str) -> None:
         new_arrival_df.to_csv(arrival_file_path, index=False)
 
 if __name__ == '__main__':
-    crawl_agmarknet_date_range('Soyabean', 'telangana', ['2006-05-01'])
+    crawl_agmarknet_date_range('Soyabean', 'telangana', start_date='2006-05-01', end_date='2006-06-10')

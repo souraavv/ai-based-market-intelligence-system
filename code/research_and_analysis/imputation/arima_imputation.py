@@ -218,7 +218,7 @@ def impute_file(input_file_path: str, output_file_path: str):
     # reading dataframe
     logger.info(f'reading input dateframe from [{input_file_path}]')
     date_col_name, missing_col_name = 'DATE', 'PRICE'
-    input_df = pd.read_csv(input_file_path, usecols=[date_col_name, missing_col_name])
+    input_df = pd.read_csv(input_file_path)
 
     # saving imputed_list and dates_list, used later when creating updated_imputed_mandi_df
     dates_list = input_df[date_col_name].tolist()
@@ -254,7 +254,7 @@ def impute_file(input_file_path: str, output_file_path: str):
     # creating updated imputed mandi df
     output_df = pd.DataFrame({
         date_col_name: dates_list,
-        missing_col_name: yi,
+        missing_col_name: yi
     })
 
     # predicted prices cannot be zero or negative, so converting them to nan and performing linear imputed
@@ -267,10 +267,9 @@ def impute_file(input_file_path: str, output_file_path: str):
 
     # converting type of all columns except date to int
     output_df[missing_col_name] = output_df[missing_col_name].astype(int)
-    
     # saving output_df
     logger.info(f'saving output dataframe at [{output_file_path}]')
-    output_df.to_csv(output_file_path, index=False)
+    output_df.to_csv(output_file_path,  index_label='', index=False)
 
 if __name__ == '__main__':
     arima_imputation(commodity='soyabean', state='telangana', mandi='adilabad', end_date='2006-03-31', info_type=commodity_info_type.PRICES)

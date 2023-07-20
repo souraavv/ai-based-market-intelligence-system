@@ -1,1 +1,1 @@
-# market-intelligence-tool
+# ai-based-market-intelligence-tool
