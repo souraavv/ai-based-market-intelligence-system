@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 import numpy as np
 
-from typing import List, Dict
+from typing import List, Dict, Set
 from selenium import webdriver
 from datetime import datetime, timedelta
 from selenium.webdriver.common.by import By
@@ -15,7 +15,7 @@ from selenium.common.exceptions import NoSuchElementException, StaleElementRefer
 chrome_options = webdriver.ChromeOptions()
 chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--window-size=1420,1080')
-chrome_options.add_argument('--headless')
+# chrome_options.add_argument('--headless')
 chrome_options.add_argument('--disable-gpu')
 
 # configuring default logging level to DEBUG
@@ -68,27 +68,27 @@ def crawl_agmarknet_date_range(commodity: str, state: str, start_date: str, end_
         # converting format of month
         y, m = i.strftime('%Y-%B').split('-')
         if y not in agg_date_range:
-            agg_date_range[y] = []
-        agg_date_range[y].append(m)
+            agg_date_range[y] = set()
+        agg_date_range[y].add(m)
 
     # check if month is already crawled, then avoid crawling it
     for y in agg_date_range:
         # making list of unique month to be crawled for each year in date_range
-        agg_date_range[y] = list(set(agg_date_range[y]))
+        # agg_date_range[y] = list(agg_date_range[y])
         
         # if there exists file for next month then we can ignore crawling for current month
-        filtered_months: List[str] = []
+        filtered_months = set()
         for m in agg_date_range[y]:
             ny, nm = (datetime.strptime(f'{y}-{m}-01', '%Y-%B-%d') + timedelta(days=31)).strftime('%Y-%B').split('-')
             nfile_path = raw_file_path(commodity=commodity, state=state, year=ny, month=nm)
             if os.path.exists(nfile_path):
                 continue
-            filtered_months.append(m)
+            filtered_months.add(m)
         # sorting month names so that crawling starts in sequence
-        filtered_months = sorted(filtered_months, key=lambda month: months_dict[month.lower()])
-        agg_date_range[y] = filtered_months
+        agg_date_range[y] = sorted(filtered_months, key=lambda month: months_dict[month.lower()])
 
     # crawling raw data for each month in a year and processing crawled data
+    logger.info(f'aggregated date range: {agg_date_range}')
     for y in agg_date_range:
         for m in agg_date_range[y]:
             crawl_agmarknet(commodity=commodity, state=state, month=m, year=y)
@@ -118,7 +118,7 @@ def crawl_agmarknet(commodity: str, state: str, month: str, year: str, retries: 
             driver.implicitly_wait(300)
             driver.find_element(by='id', value='cphBody_cboYear').send_keys(int(year))
             driver.find_element(by='id', value='cphBody_cboMonth').send_keys(month)
-            driver.find_element(by='id', value='cphBody_cboState').send_keys(state)
+            driver.find_element(by='id', value='cphBody_cboState').send_keys(state.capitalize())
             driver.find_element(by='id', value='cphBody_cboCommodity').send_keys(commodity.capitalize())
             driver.find_element(by='id', value='cphBody_btnSubmit').click()
             table = driver.find_element(by='id', value='cphBody_gridRecords')
@@ -263,4 +263,4 @@ def process_raw(commodity: str, state: str, month: str, year: str) -> None:
         new_arrival_df.to_csv(arrival_file_path, index=False)
 
 if __name__ == '__main__':
-    crawl_agmarknet_date_range('Soyabean', 'telangana', start_date='2006-05-01', end_date='2006-06-10')
+    crawl_agmarknet_date_range('Soyabean', 'Rajasthan', start_date='2006-05-01', end_date='2006-12-31')

@@ -25,11 +25,12 @@ from tensorflow.keras.models import Sequential
 current_dir: str = os.path.dirname(os.path.abspath(__file__))
 root_dir: str = os.path.abspath(os.path.join(current_dir, '..', '..', '..', '..'))
 sys.path.append(os.path.join(root_dir, 'research_and_analysis', 'imputation'))
-sys.path.append(os.path.join(root_dir, 'code', 'recommendation_models'))
+sys.path.append(os.path.join(root_dir , 'recommendation_models'))
+
 from arima_imputation import impute_file
+from prospect_theory import generate_recommendations
 
 # from code.research_and_analysis.imputation.arima_imputation import impute_file
-# from prospect_theory import generate_recommendations
 
 ''' Note that there are four levels : DEBUG, INFO, WARNING, pertubed 
     Debug allow to show all the other four
@@ -675,7 +676,7 @@ class TCNModel:
             recommendation_df = generate_recommendations(merged_forecasts_ranges=merged_forecasts_ranges, 
                                                                     recommendation_date=recommendation_date, 
                                                                     forecast_type=self.forecast_type)
-            recommendation_df.to_csv(os.path.join(self.archive_recommendation_dir, recommendation_file_name))
+            recommendation_df.to_csv(os.path.join(self.archive_recommendation_dir, recommendation_file_name), index=False)
             #TODO: push to firebase code (duplicate push are already handled)
             
         logging.critical(msg='Persist and file reorder is called after forecasts,  safely without any crash in between to ensure models are in-sync')
@@ -688,7 +689,7 @@ class TCNModel:
             can safely generate forecasts '''
         self.setup_forecast_files_for_models() 
         
-            
+    #NOTE: Cronjob must run weekly basis for the long term forecasts 
     def run_experiment(self, start_date, end_date) -> None:    
         ''' clear all the previous run files for this given, like model data, forecasted data and recommendation data'''
         ''' check if pertubed dataset is already there for these mandi's till the end_date '''
@@ -733,7 +734,7 @@ class TCNModel:
                 self.forecast_and_recommend() 
         
         ''' Note that trained_till is updated and thus if till_date is same as trained_till, thus we have +1'''
-        count_iterations = ((till_date - trained_till).days // self.DAY_JUMP) + 1
+        count_iterations = (((till_date - trained_till).days + 1) // self.DAY_JUMP)
         logging.debug(f'total number of iteration model will be called: {count_iterations} \n\n')
         logging.info(f'Model will start forecasting from {trained_till} and will goes up till {till_date}')
         for day in range(0, count_iterations):

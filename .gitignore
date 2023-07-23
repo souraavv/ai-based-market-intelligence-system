@@ -1,0 +1,44 @@
+
+# Ignore editor and IDE files
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*~.nib/
+*.xcuserdatad/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/
+*.iml
+
+# Ignore system-specific files and directories
+bin/
+build/
+dist/
+target/
+
+# Ignore user-specific files
+*.history
+*.bash_history
+
+# Ignore various compiled and generated files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Ignore compressed and archive files
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+*.bz2
+*.xz
+*.lzma
+*.z
+*.Z
+*.lz
+*.rz
+
+
+
