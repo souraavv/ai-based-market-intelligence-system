@@ -207,13 +207,12 @@ def push_trading_prices(curr_date: str):
         })
 
 if __name__ == '__main__':
-    
+    pass
     # push_data(commodity='soyabean', state='madhya pradesh', mandi='ujjain', start_date='2006-02-28', end_date='2006-03-10', info_type=commodity_info_type.PRICES)
     # push_odk(commodity='soyabean', state='telangana', mandi='adilabad', start_date='2006-02-28', end_date='2006-03-10', mongo_collection_name='adilabad')
    
     # push_recommendation(commodity='soyabean', target_state='rajasthan', target_mandi='kota', surrogate_state='madhya pradesh', surrogate_mandi='mahidpur', start_date='2006-06-02', end_date='2006-06-10', rtype=recommendation_type.SHORT)
-    # TODO (verify): verify for long term recommendation
-    # push_recommendation(commodity='soyabean', state='rajasthan', mandi='kota', surrogate_state='madhya pradesh', surrogate_mandi='mahidpur', start_date='2006-06-02', end_date='2006-06-10', rtype=recommendation_type.LONG)
+    # push_recommendation(commodity='soyabean', target_state='rajasthan', target_mandi='kota', surrogate_state='madhya pradesh', surrogate_mandi='mahidpur', start_date='2006-06-02', end_date='2006-06-10', rtype=recommendation_type.LONG)
     
     # pushing prices for current day if already crawled using crawl_trading_prices api
     # from datetime import date

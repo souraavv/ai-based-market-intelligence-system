@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 par_dir = os.path.abspath(os.path.join(__file__, '..', '..', '..', '..'))
 data_dir = os.path.join(par_dir, 'data')
 webdriver_path = os.path.join(par_dir, 'code', 'utilities', 'chromedriver')
-# TODO: Revert back markets_covered copy.csv to markets_covered.csv
 markets_info_path = os.path.join(data_dir, 'crawler_data', 'markets_covered.csv')
 
 # import crawl_agmarknet_date_range
@@ -43,12 +42,12 @@ def format_path_component(s: str) -> str:
 
 # create total count save path
 def total_count_save_path(commodity: str, date_from: str, date_to: str) -> str:
-    return os.path.join(data_dir, 'analysis_data', f'./total_count_{commodity.lower()}_{date_from.replace("-", "_")}_{date_to.replace("-", "_")}.csv')
+    return os.path.join(data_dir, 'commodity_analysis_data', f'./total_count_{commodity.lower()}_{date_from.replace("-", "_")}_{date_to.replace("-", "_")}.csv')
 
 # create procesed file path
 def raw_processed_file_path(commodity: str, state: str, mandi: str, type_prices: bool) -> str:
     type_file = 'prices' if type_prices else 'arrivals' 
-    return os.path.join(data_dir, 'raw_processed', format_path_component(commodity), type_file ,f'{format_path_component(state)}_{format_path_component(mandi)}_{type_file}.csv')
+    return os.path.join(data_dir, 'crawler_data', 'raw_processed', format_path_component(commodity), type_file ,f'{format_path_component(state)}_{format_path_component(mandi)}_{type_file}.csv')
 
 def crawl_market_total_count(commodity: str, state: str, district: str, market: str, date_from: str, date_to: str, retries: int = 5) -> int:
     logger.debug(f'{date_from}-{date_to}')
@@ -122,6 +121,7 @@ def crawl_states_total_count(states: List[str], commodity: str, date_from: str, 
             select_choices.append([commodity, state, row['District Name'], row['Market']])
 
     total = (datetime.strptime(date_to, '%d-%b-%Y') - datetime.strptime(date_from, '%d-%b-%Y')).days
+    logger.info(f'total days between {date_from} - {date_to}: {total}')
 
     total_count_data = []
     for choice in select_choices:
@@ -129,7 +129,8 @@ def crawl_states_total_count(states: List[str], commodity: str, date_from: str, 
         start_time = time.time()
 
         total_count = crawl_market_total_count(commodity=choice[0], state=choice[1], district=choice[2], market=choice[3], date_from=date_from, date_to=date_to)
-        choice.append(int(total_count/total * 100))
+        percent_total_count = int(total_count/total * 100)
+        choice.append(percent_total_count)
 
         # TODO: saving crawled infomation in total_count_bkp file to prevent crawling of market if its already crawled
         line = ','.join([str(c) for c in choice]) + '\n'
@@ -163,9 +164,13 @@ def max_continuous_missing(data_series: pd.Series) -> int:
 # date_from and date_to dates are in the format of '%Y-%m-%d'
 def filter_markets(states: List[str], commodity: str, date_from: str, date_to: str, percent_data: int, continuous_missing: int) -> List[Tuple[str, str]]:
     save_path = total_count_save_path(commodity, date_from, date_to)
+    # reading already crawled total count's file
     if os.path.exists(save_path):
+        logger.info(f'reading already crawled total counts file from [{save_path}]')
         total_count_df = pd.read_csv(save_path)
     else:
+        logger.info(f'crawling and saving total counts to file at [{save_path}]')
+
         # crawl and save data to local disk
         total_count_df: pd.DataFrame = crawl_states_total_count(states=states, commodity=commodity, date_from=datetime.strptime(date_from, '%Y-%m-%d').strftime('%d-%b-%Y'), date_to=datetime.strptime(date_to, '%Y-%m-%d').strftime('%d-%b-%Y'))
         
@@ -180,7 +185,6 @@ def filter_markets(states: List[str], commodity: str, date_from: str, date_to: s
     # filter markets based on available data
     total_count_df: pd.DataFrame = total_count_df.loc[total_count_df['Percentage'] > percent_data]
     
-
     # check total_count_df is empty
     if total_count_df.empty:
         logger.info(f'no mandis satisfying percent available criteria of {percent_data}')
@@ -194,11 +198,14 @@ def filter_markets(states: List[str], commodity: str, date_from: str, date_to: s
 
     # filter markets based on max continuous missing days
     for _, row in total_count_df.iterrows():
-        price_df = pd.read_csv(raw_processed_file_path(commodity=commodity, state=row['State'], mandi=row['Market'], type_prices=True))
+        processed_file_path = raw_processed_file_path(commodity=commodity, state=row['State'], mandi=row['Market'], type_prices=True)
+        if not os.path.exists(processed_file_path):
+            continue
+        price_df = pd.read_csv(processed_file_path)
         max_missing_days = max_continuous_missing(price_df['PRICE'])
         if max_missing_days >= continuous_missing:
             continue
-        # append market with continuous missing days lesser than continuous_missing count
+        # append state and market with continuous missing days lesser than continuous_missing count
         filtered_markets.append((row['State'], row['Market']))
 
     # check total_count_df is empty
@@ -208,5 +215,5 @@ def filter_markets(states: List[str], commodity: str, date_from: str, date_to: s
     return filtered_markets
 
 if __name__ == '__main__':
-    filtered_markets = filter_markets(states=['Rajasthan'], commodity='Soyabean', date_from='2006-01-01', date_to='2006-12-31', percent_data=10, continuous_missing=60)
-    print(filtered_markets)
+    # filtered_markets = filter_markets(states=['Rajasthan'], commodity='Soyabean', date_from='2006-01-01', date_to='2006-12-31', percent_data=10, continuous_missing=60)
+    

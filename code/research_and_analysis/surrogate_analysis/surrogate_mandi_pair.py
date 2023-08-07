@@ -1,4 +1,3 @@
-
 import os 
 import logging 
 import pandas as pd 
@@ -19,12 +18,22 @@ def find_correlation(mandi_a, mandi_b):
     correlation_val: float = corr_at[lag_days]
     return (lag_days, correlation_val)
 
+def format_path_component(s: str) -> str:
+    return '_'.join(s.split()).lower()
+
 #NOTE: This analysis completely depends on the date range of price that is passed, based on different dateranges, you may find different surrogate pair
 #NOTE: Thus it is recommended to perform this analysis at-least over 10 years, to get a clear idea on surrogate pair
 def get_surrogate_mandis(mandis_list: list, commodity: str):
     
+    for idx in range(0, len(mandis_list)):
+        state, mandi = mandis_list[idx]
+        state = format_path_component(state)
+        mandi = format_path_component(mandi)
+        mandis_list[idx] = (state, mandi)
+        
     analysis_data_dir: str = os.path.join(data_dir, 'analysis_data')
     imputed_data_dir = os.path.join(data_dir, 'imputed_data', commodity, 'prices')
+    
     
     surrogate_pair_df = {
         "Target mandi": [], 
@@ -34,8 +43,8 @@ def get_surrogate_mandis(mandis_list: list, commodity: str):
     }
     n: int = len(mandis_list)
     # Setup the matrix (n, n), where n is the total number of matrix, with some default value(doesn't matter)
-    correlation_matrix = [[-1 for mandi_a in range(0, n)] for mandi_b in range(0, n)]
-    lag_days_matrix = [[-10 for mandi_a in range(0, n)] for mandi_b in range(0, n)]
+    correlation_matrix = {mandi_b: {mandi_a: -1 for _, mandi_a in mandis_list} for _, mandi_b in mandis_list}
+    lag_days_matrix = {mandi_b: {mandi_a: -10 for _, mandi_a in mandis_list} for _, mandi_b in mandis_list}
     for (state_a, mandi_a) in mandis_list:
         for (state_b, mandi_b) in mandis_list:
             # If this is same mandi then we can set default value, but they will not be used for further computation of surrogate pair
@@ -52,7 +61,7 @@ def get_surrogate_mandis(mandis_list: list, commodity: str):
     
     for _, mandi_a in mandis_list:
         surrogate_mandi: str = str()
-        surrogate_mandi_corr: float = -100 # setup the minium value 
+        surrogate_mandi_corr: float = -100 # setup the minimum value 
         lag_days: int = -100
         for _, mandi_b in mandis_list:
             if (mandi_a == mandi_b): # ignore this case while selecting surrogate mandi
@@ -73,14 +82,18 @@ def get_surrogate_mandis(mandis_list: list, commodity: str):
                         surrogate_mandi = mandi_b
                         lag_days = lag_days_matrix[mandi_a][mandi_b]
             # Populate the dataframe
+        if lag_days != -100:
             surrogate_pair_df['Target mandi'].append(mandi_a)
-            surrogate_pair_df['Surrogate mandi'].append(mandi_b)
+            surrogate_pair_df['Surrogate mandi'].append(surrogate_mandi)
             surrogate_pair_df['Lag days'].append(lag_days)
             surrogate_pair_df['Correlation'].append(surrogate_mandi_corr)
     
     surrogate_pair_df = pd.DataFrame(surrogate_pair_df)
     file_name = os.path.join(analysis_data_dir, f'{commodity}.csv')
-    logging.info("Find the complete table at {file_name}")     
+    logging.info(f"Find the complete table at {file_name}")     
     print (surrogate_pair_df.head(10))
     # Save the file to the local storage
     surrogate_pair_df.to_csv(file_name, index=False)
+
+get_surrogate_mandis(mandis_list=[('Rajasthan', 'Baran'), ('Rajasthan', 'Atru'), ('Rajasthan', 'Chhabra'), ('Rajasthan', 'Bundi'), ('Rajasthan', 'Nimbahera'), ('Rajasthan', 'Pratapgarh'), ('Rajasthan', 'Bhawani Mandi'), ('Rajasthan', 'Jhalarapatan'), ('Rajasthan', 'Itawa'), ('Rajasthan', 'Kota'), ('Rajasthan', 'Ramaganj Mandi')]
+                        , commodity='soyabean')

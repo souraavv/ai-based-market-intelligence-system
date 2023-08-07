@@ -5,6 +5,7 @@ import shutil
 import random
 import pickle
 import logging
+import gc
 import joblib
 import warnings
 import numpy as np
@@ -23,12 +24,14 @@ from tensorflow.keras.models import Sequential
 
 
 current_dir: str = os.path.dirname(os.path.abspath(__file__))
-root_dir: str = os.path.abspath(os.path.join(current_dir, '..', '..', '..', '..'))
-sys.path.append(os.path.join(root_dir, 'research_and_analysis', 'imputation'))
-sys.path.append(os.path.join(root_dir , 'recommendation_models'))
+code_dir: str = os.path.abspath(os.path.join(current_dir, '..', '..', '..', '..'))
+sys.path.append(os.path.join(code_dir, 'research_and_analysis', 'imputation'))
+sys.path.append(os.path.join(code_dir, 'recommendation_models'))
+sys.path.append(os.path.join(code_dir, 'utilities'))
 
 from arima_imputation import impute_file
 from prospect_theory import generate_recommendations
+from push_firebase import push_recommendation, recommendation_type
 
 # from code.research_and_analysis.imputation.arima_imputation import impute_file
 
@@ -97,7 +100,7 @@ class TCNModel:
 
         ''' Standardarized the names of input mandis '''
         ''' clean files from the previous run ''' #TODO: See whether we need to call this from the other file only first time
-        self.clean_old_files() #TODO: Decide location (most prob. in the file from where it is called)
+        #self.clean_old_files() #TODO: Decide location (most prob. in the file from where it is called)
         self.initiate_directories()
         
     '''
@@ -232,7 +235,6 @@ class TCNModel:
             target_mandi_prices_loc: str = os.path.join(self.prices_dir, f'{self.target_state}_{self.target_mandi}_prices_{model_id}.csv')
         target_df: pd.DataFrame = pd.read_csv(os.path.join(target_mandi_prices_loc), index_col='DATE')
         target_df = target_df.loc[:, ~(target_df.columns.str.match(pat='Unnamed'))]
-        logging.info(f'target_df = \n {target_df.head()}')
         store_data_frames.append(target_df)
         # For surrogate mandi
         surrogate_mandi_prices_loc: str = os.path.join(self.prices_dir, f'{self.surrogate_state}_{self.surrogate_mandi}_prices.csv')
@@ -240,21 +242,14 @@ class TCNModel:
             surrogate_mandi_prices_loc: str = os.path.join(self.prices_dir, f'{self.surrogate_state}_{self.surrogate_mandi}_prices_{model_id}.csv')
         surrogate_df: pd.DataFrame = pd.read_csv(os.path.join(surrogate_mandi_prices_loc), index_col='DATE')
         surrogate_df = surrogate_df.loc[:, ~(surrogate_df.columns.str.match(pat='Unnamed'))]
-        logging.info(f'surrogate mandi df = \n {surrogate_df.head()}')
         # Shift the mandi prices based on lag days observed and fill newly become empty filled by backward fill
         surrogate_df['PRICE'] = surrogate_df['PRICE'].shift(periods=self.lag_days).bfill()
         store_data_frames.append(surrogate_df)
         
         merged_prices_df: pd.DataFrame = reduce(lambda left, right: pd.merge(left = left, right = right, on = ['DATE'], how = 'inner'), store_data_frames)
-        logging.info(f' index after merging = {merged_prices_df.index}')
         rename_columns = [self.target_mandi, self.surrogate_mandi]
-        logging.info(f'head = \n {merged_prices_df.head()}, \n columns= \n {merged_prices_df.columns}')
         merged_prices_df.set_axis(labels=rename_columns, axis='columns', inplace=True)
-        # logging.debug(merged_prices_df.columns)
         merged_prices_df.index = pd.to_datetime(arg=merged_prices_df.index, format=self.DATE_FORMAT)
-        logging.info(f' merged prices head = \n {merged_prices_df.head()}')
-        logging.info(f' merged prices df columns = \n {merged_prices_df.columns}')
-        # logging.debug(f'{merged_prices_df.head()} and {merged_prices_df.columns} and {merged_prices_df.index}')
         return merged_prices_df
     
     '''
@@ -347,8 +342,6 @@ class TCNModel:
         for mandi_state, mandi_name in mandis:
             # mandi_df is the actual price df which is fetched from the agmarknet
             mandi_df = pd.read_csv(os.path.join(self.raw_processed_prices_dir, f'{mandi_state}_{mandi_name}_prices.csv'))
-            logging.debug(f'Reached..')
-            logging.debug(f'mandi_df = {mandi_df.head()}')
             mandi_df['DATE'] = pd.to_datetime(mandi_df['DATE'], format=self.DATE_FORMAT)
             # missing_days_count and available_days_count will store the continuous missing days and avail days length in a list 
             missing_days_count, available_days_count = list(), list()
@@ -522,7 +515,7 @@ class TCNModel:
         # If the is the retrain day (which happen every self.RETRAIN_FREQUENCY) we first retrain the model and save back the fresh model
         if retrain_day == True:
             # Generate the fresh pertubed dataset, since new 15 days get added
-            logging.debug(msg=f''' [TRAINING DAY]: For Model : [{model_id}], 
+            logging.info(msg=f''' [TRAINING DAY]: For Model : [{model_id}], 
                                    This is a training Day, Prediction will happen after training ''')
             training_data, _ = self.split_train_and_test_data(merged_prices_df=merged_prices_df)
             training_input, training_output = self.prepare_training_data(training_data=training_data)
@@ -540,8 +533,12 @@ class TCNModel:
             joblib.dump(input1_scaler, os.path.join(self.saved_scaler_dir, f'model_{model_id}', f'input_scaler_{self.target_mandi}.save'))
             joblib.dump(input2_scaler, os.path.join(self.saved_scaler_dir, f'model_{model_id}', f'input_scaler_{self.surrogate_mandi}.save'))
             joblib.dump(output_scaler, os.path.join(self.saved_scaler_dir, f'model_{model_id}', 'output_scaler.save'))
-           
-        
+            tf.compat.v1.reset_default_graph()
+            del tcn_model  
+            del training_input
+            del training_output
+            
+         
         logging.info(f'''Started forecast for model = {model_id}''')
         ''' Load the TCN model from the disk to the memory for the forecasts ''' 
         tcn_model = load_model(os.path.join(self.saved_model_dir, f'model_{model_id}'))
@@ -559,7 +556,10 @@ class TCNModel:
         persist_day_df = pd.DataFrame(data={'FORECASTS': forecast_output.tolist()})
         persist_day_df.to_csv(os.path.join(self.raw_forecasted_dir, f'model_{model_id}', 'day_0.csv'), index=False)
         logging.debug(msg='Done with saving forecasts')
-
+        tf.compat.v1.reset_default_graph()
+        del tcn_model
+        del forecast_input
+        del forecast_output
     '''
     @merge_forecasts_of_models
     - This will merge the forecasts for each model, this is an utility function 
@@ -657,7 +657,7 @@ class TCNModel:
         logging.debug('Updating the persist file for model info like retrain date, training up to which date')
         if training_end_date == model_retrain_date:
             model_retrain_date += timedelta(days = self.RETRAIN_FREQUENCY)
-        training_end_date += timedelta(days=self.DAY_JUMP)
+        training_end_date += timedelta(days=1) # only increment by +1, since cronjob is running daily with one iteration.
         logging.debug(f'Training end date: {training_end_date} and model_retrain date: {model_retrain_date} \n\n\n')
             
         ''' If there exists enough file, atleast for last self.OUTPUT_SIZE days, then start with the recommendations '''
@@ -672,12 +672,22 @@ class TCNModel:
             with open(os.path.join(self.forecast_ranges_dir, forecast_range_file), 'wb') as file:
                 pickle.dump(obj=merged_forecasts_ranges, file=file)
             file.close()
-            recommendation_file_name: str = f'recommendation_{datetime.strftime(recommendation_date, self.DATE_FORMAT)}.csv'
+            recommendation_date_str: str = datetime.strftime(recommendation_date, self.DATE_FORMAT)
+            recommendation_file_name: str = f'recommendation_{recommendation_date_str}.csv'
             recommendation_df = generate_recommendations(merged_forecasts_ranges=merged_forecasts_ranges, 
                                                                     recommendation_date=recommendation_date, 
                                                                     forecast_type=self.forecast_type)
             recommendation_df.to_csv(os.path.join(self.archive_recommendation_dir, recommendation_file_name), index=False)
             #TODO: push to firebase code (duplicate push are already handled)
+            push_recommendation(commodity=self.commodity_name, 
+                                target_state=self.target_state, 
+                                target_mandi=self.target_mandi, 
+                                surrogate_state=self.surrogate_state, 
+                                surrogate_mandi=self.surrogate_mandi, 
+                                start_date=recommendation_date_str, 
+                                end_date=recommendation_date_str,
+                                rtype=recommendation_type.SHORT if self.forecast_type == 'shortterm_models' else recommendation_type.LONG)
+
             
         logging.critical(msg='Persist and file reorder is called after forecasts,  safely without any crash in between to ensure models are in-sync')
         ''' Store the updated data back to the persist storage, this data need to persist to survive system crash '''
@@ -702,6 +712,7 @@ class TCNModel:
         for day in range(0, total_days_to_run):
             logging.debug(msg=f'Forecast and Recommendation called for day = {datetime.strftime(start_date + timedelta(days=day), self.DATE_FORMAT)}\n\n')
             self.forecast_and_recommend()
+            gc.collect()
     
     '''
     @forecast(...)
@@ -720,11 +731,12 @@ class TCNModel:
                           - datetime.strptime(self.training_start_date, self.DATE_FORMAT) 
         trained_till = datetime.strptime(self.training_start_date, self.DATE_FORMAT) \
                                         + timedelta(days=delta.days - self.OUTPUT_SIZE * self.DAY_JUMP)
-        
+        next_training_date = trained_till 
         previous_run_info_file: str = os.path.join(self.persist_data_dir, self.MODEL_FILE_INFO)
+
         if os.path.exists(previous_run_info_file):
             with open(file=previous_run_info_file, mode='rb') as f:
-                trained_till, _, _ = pickle.load(file=f)   
+                trained_till, next_training_date = pickle.load(file=f)   
             f.close()
         else:
             # In case if this model is called for the first time, we need to run prior for self.OUTPUT_SIZE days, so that we have
@@ -732,7 +744,15 @@ class TCNModel:
             # trained_date is default set to recommend_date - self.OUTPUT_SIZE * self.DAY_JUMP
             for day in range(0, self.OUTPUT_SIZE):
                 self.forecast_and_recommend() 
+                gc.collect()
         
+
+        if (self.forecast_type == 'longterm_models' and trained_till < next_training_date):
+            trained_till += timedelta(days=1)
+            with open(file=previous_run_info_file, mode='wb') as f:
+                pickle.dump([trained_till, next_training_date], file=f)
+            return
+
         ''' Note that trained_till is updated and thus if till_date is same as trained_till, thus we have +1'''
         count_iterations = (((till_date - trained_till).days + 1) // self.DAY_JUMP)
         logging.debug(f'total number of iteration model will be called: {count_iterations} \n\n')
@@ -741,18 +761,20 @@ class TCNModel:
             forecast_date: str = datetime.strftime(trained_till + timedelta(days=day), self.DATE_FORMAT)
             logging.info(msg=f'Generating forecasts and recommendations for {forecast_date} and will goes up till {till_date}')
             self.forecast_and_recommend()
+            gc.collect()
             
         
 if __name__ == '__main__':
     logging.info('This is an experiment and not run from the pipeline')
     logging.warning('Note this will override the existing model in pipeline too')
     
+
     tcn_model = TCNModel(target_state='rajasthan', 
                          target_mandi = 'kota',
                          surrogate_state='madhya pradesh', 
                          surrogate_mandi = 'mahidpur', 
                          lag_days=3, training_start_date='2006-01-01', 
-                         recommendation_start_date='2007-05-01',
+                         recommendation_start_date='2008-10-01',
                          commodity='soyabean', 
                          forecast_type='shortterm')
     

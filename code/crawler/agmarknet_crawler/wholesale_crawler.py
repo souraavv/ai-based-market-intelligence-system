@@ -14,21 +14,21 @@ from selenium.common.exceptions import NoSuchElementException, StaleElementRefer
 # chrome options for webdriver
 chrome_options = webdriver.ChromeOptions()
 chrome_options.add_argument('--no-sandbox')
-chrome_options.add_argument('--window-size=1420,1080')
-# chrome_options.add_argument('--headless')
+# chrome_options.add_argument('--window-size=1420,1080')
+chrome_options.add_argument('--headless')
 chrome_options.add_argument('--disable-gpu')
 
 # configuring default logging level to DEBUG
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 # getting reference to logger object
 logger = logging.getLogger(__name__)
 
 # paths
 par_dir = os.path.abspath(os.path.join(__file__, '..', '..', '..', '..'))
-data_dir = os.path.join(par_dir, 'data', 'crawler_data')
+data_dir = os.path.join(par_dir, 'data')
 webdriver_path = os.path.join(par_dir, 'code', 'utilities', 'chromedriver')
-mandis_info_path = os.path.join(data_dir, 'mandis_info.csv')
+mandis_info_path = os.path.join(data_dir, 'crawler_data', 'mandis_info.csv')
 
 # formatting string as '_' separated and in lowercase
 def format_path_component(s: str) -> str:
@@ -36,12 +36,12 @@ def format_path_component(s: str) -> str:
 
 # create raw file path
 def raw_file_path(commodity: str, state: str, year: str, month: str) -> str:
-    return os.path.join(data_dir, 'raw', format_path_component(commodity), f'{format_path_component(state)}_{year}_{month}.csv')
+    return os.path.join(data_dir, 'crawler_data', 'raw', format_path_component(commodity), f'{format_path_component(state)}_{year}_{month}.csv')
 
 # create procesed file path
 def raw_processed_file_path(commodity: str, state: str, mandi: str, type_prices: bool) -> str:
     type_file = 'prices' if type_prices else 'arrivals' 
-    return os.path.join(data_dir, 'raw_processed', format_path_component(commodity), type_file ,f'{format_path_component(state)}_{format_path_component(mandi)}_{type_file}.csv')
+    return os.path.join(data_dir, 'crawler_data', 'raw_processed', format_path_component(commodity), type_file ,f'{format_path_component(state)}_{format_path_component(mandi)}_{type_file}.csv')
 
 months_dict = {
     'january': 1,
@@ -114,9 +114,9 @@ def crawl_agmarknet(commodity: str, state: str, month: str, year: str, retries: 
         try:
             logger.debug('instantiating driver')
             driver = webdriver.Chrome(webdriver_path, options=chrome_options)
-            driver.get('http://agmarknet.gov.in/PriceAndArrivals/DatewiseCommodityReport.aspx#')
+            driver.get('https://agmarknet.gov.in/PriceAndArrivals/DatewiseCommodityReport.aspx#')
             driver.implicitly_wait(300)
-            driver.find_element(by='id', value='cphBody_cboYear').send_keys(int(year))
+            driver.find_element(by='id', value='cphBody_cboYear').send_keys(year)
             driver.find_element(by='id', value='cphBody_cboMonth').send_keys(month)
             driver.find_element(by='id', value='cphBody_cboState').send_keys(state.capitalize())
             driver.find_element(by='id', value='cphBody_cboCommodity').send_keys(commodity.capitalize())
@@ -171,7 +171,7 @@ def process_raw(commodity: str, state: str, month: str, year: str) -> None:
 
     file_path = raw_file_path(commodity=commodity, state=state, year=year, month=month)
     
-    # Formatting file
+    # formatting file
     if not os.path.exists(file_path):
         logger.error(f'file_path: [{file_path}] not exists')
         sys.exit(1)
@@ -218,7 +218,7 @@ def process_raw(commodity: str, state: str, month: str, year: str) -> None:
         arrival_df = mandi_df[['DATE', 'ARRIVAL']]
         price_df = mandi_df[['DATE', 'PRICE']]
 
-        # Format mandi name
+        # format mandi name
         mandi = format_path_component(mandi)
 
         # merging with existing arrival and prices dataframe
@@ -250,17 +250,16 @@ def process_raw(commodity: str, state: str, month: str, year: str) -> None:
         new_price_df.sort_values(by=['DATE'], inplace=True)
         new_arrival_df.sort_values(by=['DATE'], inplace=True)
 
-        # Create file directory if not exists
+        # create file directory if not exists
         os.makedirs(os.path.dirname(price_file_path), exist_ok=True)
         os.makedirs(os.path.dirname(arrival_file_path), exist_ok=True)
         
         # saving merged prices and arrival df
+        # NOTE: cannot convert prices or arrival information to integer due to NAN values
         logger.info('saving newly prices data')
-        new_price_df['PRICE'] = new_price_df['PRICE'].astype(int)
         new_price_df.to_csv(price_file_path, index=False)
         logger.info('saving newly arrivals data')
-        new_arrival_df['ARRIVAL'] = new_arrival_df['ARRIVAL'].astype(int)
         new_arrival_df.to_csv(arrival_file_path, index=False)
 
 if __name__ == '__main__':
-    crawl_agmarknet_date_range('Soyabean', 'Rajasthan', start_date='2006-05-01', end_date='2006-12-31')
+    crawl_agmarknet_date_range('Soyabean', 'rajasthan', start_date='2006-01-01', end_date='2006-12-31')

@@ -1,0 +1,12 @@
+Target mandi,Surrogate mandi,Lag days,Correlation
+baran,pratapgarh,1,0.9091168009345153
+atru,baran,10,0.4968006446005081
+chhabra,nimbahera,4,0.3837347395401988
+bundi,pratapgarh,1,0.8971073873253345
+nimbahera,itawa,7,0.4681311220299489
+pratapgarh,bhawani_mandi,1,0.8669227260605935
+bhawani_mandi,chhabra,6,0.35179930911852025
+jhalarapatan,pratapgarh,2,0.9178589598267316
+itawa,pratapgarh,2,0.9056308371196503
+kota,jhalarapatan,1,0.8844520963849507
+ramaganj_mandi,baran,1,0.9632086937633138
